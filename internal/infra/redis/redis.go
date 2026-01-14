@@ -9,7 +9,7 @@ import (
 	"github.com/sifan077/PowerURL/config"
 )
 
-const defaultDialTimeout = 5 * time.Second
+const defaultDialTimeout = 30 * time.Second
 
 // NewClient builds a redis client using app config and verifies connectivity via PING.
 func NewClient(ctx context.Context, cfg config.RedisConfig) (*redis.Client, error) {
