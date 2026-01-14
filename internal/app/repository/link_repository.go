@@ -2,8 +2,11 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/sifan077/PowerURL/internal/app/model"
 	"gorm.io/gorm"
 )
@@ -11,6 +14,11 @@ import (
 var (
 	// ErrLinkNotFound signals that the requested short link does not exist.
 	ErrLinkNotFound = errors.New("link not found")
+)
+
+const (
+	cacheKeyPrefix = "link:"
+	cacheTTL       = 1 * time.Hour
 )
 
 // LinkRepository defines the data access contract for short links.
@@ -22,12 +30,13 @@ type LinkRepository interface {
 }
 
 type linkRepository struct {
-	db *gorm.DB
+	db    *gorm.DB
+	redis *redis.Client
 }
 
-// NewLinkRepository returns a GORM-backed LinkRepository.
-func NewLinkRepository(db *gorm.DB) LinkRepository {
-	return &linkRepository{db: db}
+// NewLinkRepository returns a GORM-backed LinkRepository with Redis caching.
+func NewLinkRepository(db *gorm.DB, redis *redis.Client) LinkRepository {
+	return &linkRepository{db: db, redis: redis}
 }
 
 func (r *linkRepository) Create(ctx context.Context, link *model.Link) error {
@@ -38,6 +47,18 @@ func (r *linkRepository) Create(ctx context.Context, link *model.Link) error {
 }
 
 func (r *linkRepository) GetByCode(ctx context.Context, code string) (*model.Link, error) {
+	cacheKey := cacheKeyPrefix + code
+
+	if r.redis != nil {
+		cached, err := r.redis.Get(ctx, cacheKey).Result()
+		if err == nil {
+			var link model.Link
+			if err := json.Unmarshal([]byte(cached), &link); err == nil {
+				return &link, nil
+			}
+		}
+	}
+
 	var link model.Link
 	if err := r.db.WithContext(ctx).Where("code = ?", code).First(&link).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -45,6 +66,14 @@ func (r *linkRepository) GetByCode(ctx context.Context, code string) (*model.Lin
 		}
 		return nil, err
 	}
+
+	if r.redis != nil {
+		data, err := json.Marshal(link)
+		if err == nil {
+			r.redis.Set(ctx, cacheKey, data, cacheTTL)
+		}
+	}
+
 	return &link, nil
 }
 
@@ -87,5 +116,14 @@ func (r *linkRepository) Update(ctx context.Context, link *model.Link) error {
 		return ErrLinkNotFound
 	}
 
-	return r.db.WithContext(ctx).Where("code = ?", link.Code).First(link).Error
+	if err := r.db.WithContext(ctx).Where("code = ?", link.Code).First(link).Error; err != nil {
+		return err
+	}
+
+	if r.redis != nil {
+		cacheKey := cacheKeyPrefix + link.Code
+		r.redis.Del(ctx, cacheKey)
+	}
+
+	return nil
 }

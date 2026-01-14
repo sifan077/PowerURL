@@ -104,7 +104,7 @@ func main() {
 		log.Info("Skipping Prometheus metrics server in development mode")
 	}
 
-	linkRepo := apprepository.NewLinkRepository(gormDB)
+	linkRepo := apprepository.NewLinkRepository(gormDB, redisClient)
 
 	server := appserver.New(appserver.Dependencies{
 		Logger:    log,
