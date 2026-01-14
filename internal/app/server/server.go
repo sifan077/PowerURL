@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
+	"github.com/sifan077/PowerURL/internal/app/repository"
 	"go.uber.org/zap"
 )
 
@@ -17,6 +18,7 @@ type Dependencies struct {
 	Redis     *redis.Client
 	NATS      *nats.Conn
 	JetStream nats.JetStreamContext
+	Links     repository.LinkRepository
 }
 
 // Server wraps the Fiber application and its dependencies.

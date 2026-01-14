@@ -7,6 +7,8 @@ import (
 	"os"
 
 	"github.com/sifan077/PowerURL/config"
+	appmodel "github.com/sifan077/PowerURL/internal/app/model"
+	apprepository "github.com/sifan077/PowerURL/internal/app/repository"
 	appserver "github.com/sifan077/PowerURL/internal/app/server"
 	"github.com/sifan077/PowerURL/internal/infra/logger"
 	infraNATS "github.com/sifan077/PowerURL/internal/infra/nats"
@@ -43,6 +45,20 @@ func main() {
 		zap.Int("nats_port", cfg.NATS.Port),
 		zap.Int("nats_monitor_port", cfg.NATS.MonitorPort),
 	)
+
+	gormDB, err := infraPostgres.NewGorm(cfg.Postgres)
+	if err != nil {
+		log.Fatal("Failed to open GORM connection", zap.Error(err))
+	}
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		log.Fatal("Failed to access underlying SQL DB", zap.Error(err))
+	}
+	defer sqlDB.Close()
+
+	if err := infraPostgres.AutoMigrate(ctx, gormDB, &appmodel.Link{}); err != nil {
+		log.Fatal("Failed to run database migrations", zap.Error(err))
+	}
 
 	pool, err := infraPostgres.NewPool(ctx, cfg.Postgres)
 	if err != nil {
@@ -84,12 +100,15 @@ func main() {
 		log.Info("Skipping Prometheus metrics server in development mode")
 	}
 
+	linkRepo := apprepository.NewLinkRepository(gormDB)
+
 	server := appserver.New(appserver.Dependencies{
 		Logger:    log,
 		Postgres:  pool,
 		Redis:     redisClient,
 		NATS:      natsConn,
 		JetStream: js,
+		Links:     linkRepo,
 	})
 
 	if err := server.Listen(":8080"); err != nil {

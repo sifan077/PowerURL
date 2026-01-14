@@ -14,27 +14,7 @@ const defaultDialTimeout = 5 * time.Second
 
 // NewPool creates a pgx connection pool using the provided config and verifies connectivity.
 func NewPool(ctx context.Context, cfg config.PostgresConfig) (*pgxpool.Pool, error) {
-	host := cfg.Host
-	if host == "" {
-		host = "localhost"
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = 5432
-	}
-	sslMode := cfg.SSLMode
-	if sslMode == "" {
-		sslMode = "disable"
-	}
-
-	connString := buildConnString(connParts{
-		host:     host,
-		port:     port,
-		user:     cfg.User,
-		password: cfg.Password,
-		database: cfg.Database,
-		sslMode:  sslMode,
-	})
+	connString := ConnString(cfg)
 
 	poolCfg, err := pgxpool.ParseConfig(connString)
 	if err != nil {
@@ -66,6 +46,30 @@ type connParts struct {
 	password string
 	database string
 	sslMode  string
+}
+
+func ConnString(cfg config.PostgresConfig) string {
+	host := cfg.Host
+	if host == "" {
+		host = "localhost"
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = 5432
+	}
+	sslMode := cfg.SSLMode
+	if sslMode == "" {
+		sslMode = "disable"
+	}
+
+	return buildConnString(connParts{
+		host:     host,
+		port:     port,
+		user:     cfg.User,
+		password: cfg.Password,
+		database: cfg.Database,
+		sslMode:  sslMode,
+	})
 }
 
 func buildConnString(parts connParts) string {

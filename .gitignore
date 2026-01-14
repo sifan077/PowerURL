@@ -13,6 +13,7 @@ coverage.*
 
 # Go modules
 vendor/
+testdata/
 
 # IDE/editor
 .idea/
