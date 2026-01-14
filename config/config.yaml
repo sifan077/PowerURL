@@ -1,0 +1,31 @@
+postgres:
+  host: 192.168.3.114
+  user: shorturl
+  password: shorturl
+  database: shorturl
+  port: 5432
+  sslmode: disable
+
+redis:
+  host: 192.168.3.114
+  port: 6379
+  password: ""
+  db: 0
+
+nats:
+  host: 192.168.3.114
+  port: 4222
+  user: ""
+  password: ""
+  monitor_port: 8222
+
+prometheus:
+  port: 9090
+  retention: 7d
+  scrape_interval: 5s
+  target: app:8080
+
+grafana:
+  port: 3001
+  admin_user: admin
+  admin_password: admin

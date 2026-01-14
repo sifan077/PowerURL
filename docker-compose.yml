@@ -1,0 +1,98 @@
+name: shorturl-env
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: shorturl_postgres
+    env_file: .env
+    environment:
+      POSTGRES_USER: "${PG_USER}"
+      POSTGRES_PASSWORD: "${PG_PASSWORD}"
+      POSTGRES_DB: "${PG_DB}"
+    ports:
+      - "${PG_PORT}:5432"
+    volumes:
+      - "${DATA_DIR}/postgres:/var/lib/postgresql/data"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks: [shorturl_net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: shorturl_redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - "${DATA_DIR}/redis:/data"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks: [shorturl_net]
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: shorturl_nats
+    command: ["-js", "-m", "8222", "--store_dir", "/data"]
+    ports:
+      - "${NATS_PORT}:4222"
+      - "${NATS_MONITOR_PORT}:8222"
+    volumes:
+      - "${DATA_DIR}/nats:/data"
+    restart: unless-stopped
+    networks: [shorturl_net]
+
+  # --- 监控：默认不启动，只有启用 profile=monitor 才会启动 ---
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: shorturl_prometheus
+    profiles: ["monitor"]
+    env_file: .env
+    ports:
+      - "${PROM_PORT}:9090"
+    volumes:
+      - "${DATA_DIR}/prometheus:/prometheus"
+    # 启动时动态生成配置（不需要额外文件）
+    command: >
+      sh -c "
+      cat > /etc/prometheus/prometheus.yml << 'EOF'
+      global:
+        scrape_interval: ${PROM_SCRAPE_INTERVAL}
+      scrape_configs:
+        - job_name: 'shorturl'
+          metrics_path: /metrics
+          static_configs:
+            - targets: ['${PROM_TARGET}']
+      EOF
+      && /bin/prometheus
+      --config.file=/etc/prometheus/prometheus.yml
+      --storage.tsdb.path=/prometheus
+      --storage.tsdb.retention.time=${PROM_RETENTION}
+      "
+    restart: unless-stopped
+    networks: [shorturl_net]
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: shorturl_grafana
+    profiles: ["monitor"]
+    env_file: .env
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    volumes:
+      - "${DATA_DIR}/grafana:/var/lib/grafana"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks: [shorturl_net]
+
+networks:
+  shorturl_net:
+    driver: bridge

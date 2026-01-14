@@ -1,0 +1,31 @@
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build artifacts
+*.log
+*.out
+*.test
+coverage.*
+
+# Go modules
+vendor/
+
+# IDE/editor
+.idea/
+.vscode/
+*.swp
+
+# Env/config overrides
+.env.local
+.env.*
+!.env
+
+# OS junk
+Thumbs.db
+.DS_Store
+
+todo.md
