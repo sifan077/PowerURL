@@ -24,6 +24,9 @@ type Config struct {
 
 	// Grafana
 	Grafana GrafanaConfig `mapstructure:"grafana"`
+
+	// Security
+	Security SecurityConfig `mapstructure:"security"`
 }
 
 type PostgresConfig struct {
@@ -61,6 +64,10 @@ type GrafanaConfig struct {
 	Port          int    `mapstructure:"port"`
 	AdminUser     string `mapstructure:"admin_user"`
 	AdminPassword string `mapstructure:"admin_password"`
+}
+
+type SecurityConfig struct {
+	RedirectSecret string `mapstructure:"redirect_secret"`
 }
 
 func Load() (*Config, error) {
@@ -131,4 +138,7 @@ func bindEnvVars(v *viper.Viper) {
 	v.BindEnv("grafana.port", "GRAFANA_PORT")
 	v.BindEnv("grafana.admin_user", "GF_SECURITY_ADMIN_USER")
 	v.BindEnv("grafana.admin_password", "GF_SECURITY_ADMIN_PASSWORD")
+
+	// Security
+	v.BindEnv("security.redirect_secret", "REDIRECT_SECRET")
 }

@@ -29,3 +29,6 @@ grafana:
   port: 3001
   admin_user: admin
   admin_password: admin
+
+security:
+  redirect_secret: sifan077

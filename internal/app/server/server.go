@@ -8,6 +8,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 	"github.com/sifan077/PowerURL/internal/app/repository"
+	inthttp "github.com/sifan077/PowerURL/internal/http/handler"
 	"go.uber.org/zap"
 )
 
@@ -19,6 +20,7 @@ type Dependencies struct {
 	NATS      *nats.Conn
 	JetStream nats.JetStreamContext
 	Links     repository.LinkRepository
+	Secret    []byte
 }
 
 // Server wraps the Fiber application and its dependencies.
@@ -51,7 +53,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 func (s *Server) registerRoutes() {
-	s.app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Hello, World!")
+	redirectHandler := inthttp.NewRedirectHandler(inthttp.RedirectDeps{
+		Logger: s.deps.Logger,
+		Links:  s.deps.Links,
+		Secret: s.deps.Secret,
 	})
+	redirectHandler.Register(s.app)
 }

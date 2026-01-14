@@ -46,6 +46,10 @@ func main() {
 		zap.Int("nats_monitor_port", cfg.NATS.MonitorPort),
 	)
 
+	if cfg.Security.RedirectSecret == "" {
+		log.Fatal("Redirect secret is missing. Set security.redirect_secret or REDIRECT_SECRET")
+	}
+
 	gormDB, err := infraPostgres.NewGorm(cfg.Postgres)
 	if err != nil {
 		log.Fatal("Failed to open GORM connection", zap.Error(err))
@@ -109,6 +113,7 @@ func main() {
 		NATS:      natsConn,
 		JetStream: js,
 		Links:     linkRepo,
+		Secret:    []byte(cfg.Security.RedirectSecret),
 	})
 
 	if err := server.Listen(":8080"); err != nil {
