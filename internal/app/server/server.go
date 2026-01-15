@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sifan077/PowerURL/internal/app/repository"
 	inthttp "github.com/sifan077/PowerURL/internal/http/handler"
+	"github.com/sifan077/PowerURL/internal/http/middleware"
 	"go.uber.org/zap"
 )
 
@@ -38,6 +39,7 @@ func New(deps Dependencies) *Server {
 		deps: deps,
 	}
 
+	s.registerMiddleware()
 	s.registerRoutes()
 	return s
 }
@@ -50,6 +52,16 @@ func (s *Server) Listen(addr string) error {
 // Shutdown gracefully stops the Fiber server.
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.app.ShutdownWithContext(ctx)
+}
+
+func (s *Server) registerMiddleware() {
+	rateLimitConfig := middleware.DefaultRateLimitConfig()
+
+	s.app.Use(middleware.Recovery(s.deps.Logger))
+	s.app.Use(middleware.RequestID())
+	s.app.Use(middleware.Logger(s.deps.Logger))
+	s.app.Use(middleware.CORS())
+	s.app.Use(middleware.RateLimit(s.deps.Redis, rateLimitConfig, s.deps.Logger))
 }
 
 func (s *Server) registerRoutes() {
