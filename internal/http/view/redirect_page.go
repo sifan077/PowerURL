@@ -14,6 +14,7 @@ type RedirectPageData struct {
 	Mode         string
 	TimerSeconds int
 	Token        string
+	ClickID      string
 }
 
 var redirectPageTmpl = template.Must(template.New("redirect_page").Parse(`

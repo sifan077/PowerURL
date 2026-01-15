@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -28,8 +29,9 @@ type Dependencies struct {
 
 // Server wraps the Fiber application and its dependencies.
 type Server struct {
-	app  *fiber.App
-	deps Dependencies
+	app                 *fiber.App
+	deps                Dependencies
+	clickTimeoutChecker *service.ClickTimeoutChecker
 }
 
 // New creates a new HTTP server instance with default routes.
@@ -43,6 +45,7 @@ func New(deps Dependencies) *Server {
 
 	s.registerMiddleware()
 	s.registerRoutes()
+	s.startBackgroundServices()
 	return s
 }
 
@@ -53,7 +56,16 @@ func (s *Server) Listen(addr string) error {
 
 // Shutdown gracefully stops the Fiber server.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.clickTimeoutChecker != nil {
+		s.clickTimeoutChecker.Stop()
+	}
 	return s.app.ShutdownWithContext(ctx)
+}
+
+func (s *Server) startBackgroundServices() {
+	// Start click timeout checker with 60 seconds TTL
+	s.clickTimeoutChecker = service.NewClickTimeoutChecker(s.deps.Logger, s.deps.ClickEvents, 60*time.Second)
+	s.clickTimeoutChecker.Start()
 }
 
 func (s *Server) registerMiddleware() {
@@ -78,6 +90,7 @@ func (s *Server) registerRoutes() {
 	redirectHandler := inthttp.NewRedirectHandler(inthttp.RedirectDeps{
 		Logger:         s.deps.Logger,
 		Links:          s.deps.Links,
+		ClickEvents:    s.deps.ClickEvents,
 		Secret:         s.deps.Secret,
 		ClickPublisher: clickPublisher,
 	})

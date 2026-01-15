@@ -8,8 +8,15 @@ type ClickEvent struct {
 	LinkCode  string    `json:"link_code" gorm:"size:32;not null;index"`
 	IP        string    `json:"ip" gorm:"size:64;not null"`
 	UserAgent string    `json:"user_agent" gorm:"type:text"`
+	Status    string    `json:"status" gorm:"size:16;not null;default:success;index"`
 	Timestamp time.Time `json:"timestamp" gorm:"not null;index"`
 }
+
+const (
+	ClickStatusSuccess = "success"
+	ClickStatusPending = "pending"
+	ClickStatusFailed  = "failed"
+)
 
 const (
 	ClickStreamName     = "CLICKS"

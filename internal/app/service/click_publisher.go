@@ -20,12 +20,17 @@ func NewClickPublisher(js nats.JetStreamContext) *ClickPublisher {
 }
 
 // Publish publishes a click event to the stream
-func (p *ClickPublisher) Publish(linkCode, ip, userAgent string) error {
+func (p *ClickPublisher) Publish(linkCode, ip, userAgent, status, clickID string) error {
+	eventID := clickID
+	if eventID == "" {
+		eventID = uuid.New().String()
+	}
 	event := model.ClickEvent{
-		ID:        uuid.New().String(),
+		ID:        eventID,
 		LinkCode:  linkCode,
 		IP:        ip,
 		UserAgent: userAgent,
+		Status:    status,
 		Timestamp: time.Now(),
 	}
 

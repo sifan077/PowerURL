@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/sifan077/PowerURL/internal/app/model"
 	"github.com/sifan077/PowerURL/internal/app/repository"
 	"github.com/sifan077/PowerURL/internal/app/service"
@@ -19,16 +20,18 @@ const tokenTTL = 60 * time.Second
 
 // RedirectDeps groups dependencies required by redirect handlers.
 type RedirectDeps struct {
-	Logger         *zap.Logger
-	Links          repository.LinkRepository
-	Secret         []byte
-	ClickPublisher *service.ClickPublisher
+	Logger               *zap.Logger
+	Links                repository.LinkRepository
+	ClickEvents          repository.ClickEventRepository
+	Secret               []byte
+	ClickPublisher       *service.ClickPublisher
 }
 
 // RedirectHandler implements the redirect + intermediate flows.
 type RedirectHandler struct {
 	logger         *zap.Logger
 	links          repository.LinkRepository
+	clickEvents    repository.ClickEventRepository
 	tokens         *httpUtil.TokenSigner
 	clickPublisher *service.ClickPublisher
 }
@@ -42,6 +45,7 @@ func NewRedirectHandler(deps RedirectDeps) *RedirectHandler {
 	return &RedirectHandler{
 		logger:         logger,
 		links:          deps.Links,
+		clickEvents:    deps.ClickEvents,
 		tokens:         httpUtil.NewTokenSigner(deps.Secret, tokenTTL),
 		clickPublisher: deps.ClickPublisher,
 	}
@@ -87,14 +91,19 @@ func (h *RedirectHandler) Resolve(c *fiber.Ctx) error {
 
 	switch link.Mode {
 	case "", "direct":
-		// Publish click event for direct mode
+		// Publish click event for direct mode with success status
 		if h.clickPublisher != nil {
-			go h.publishClickEvent(code, c)
+			go h.publishClickEvent(code, c, model.ClickStatusSuccess, "")
 		}
 		h.logger.Debug("redirecting short link", zap.String("code", code), zap.String("target", link.URL))
 		return c.Redirect(link.URL, fiber.StatusFound)
 	case "click", "timer":
-		return h.renderIntermediate(c, link)
+		// Publish click event for intermediate modes with pending status
+		clickID := uuid.New().String()
+		if h.clickPublisher != nil {
+			go h.publishClickEvent(code, c, model.ClickStatusPending, clickID)
+		}
+		return h.renderIntermediateWithClickID(c, link, clickID)
 	default:
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
 			"error": "redirect mode is not supported",
@@ -113,7 +122,8 @@ func (h *RedirectHandler) Go(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.tokens.Validate(code, token); err != nil {
+	clickID, err := h.tokens.ValidateAndExtractClickID(code, token)
+	if err != nil {
 		if errors.Is(err, httpUtil.ErrInvalidToken) {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": err.Error(),
@@ -137,9 +147,13 @@ func (h *RedirectHandler) Go(c *fiber.Ctx) error {
 		})
 	}
 
-	// Publish click event asynchronously
-	if h.clickPublisher != nil {
-		go h.publishClickEvent(code, c)
+	// Update click event status to success if click ID is present
+	if clickID != "" && h.clickEvents != nil {
+		go func() {
+			if err := h.clickEvents.UpdateStatus(ctx, clickID, model.ClickStatusSuccess); err != nil {
+				h.logger.Error("failed to update click event status", zap.Error(err), zap.String("click_id", clickID))
+			}
+		}()
 	}
 
 	h.logger.Debug("final redirect", zap.String("code", code), zap.String("target", link.URL))
@@ -147,7 +161,12 @@ func (h *RedirectHandler) Go(c *fiber.Ctx) error {
 }
 
 func (h *RedirectHandler) renderIntermediate(c *fiber.Ctx, link *model.Link) error {
-	token, err := h.tokens.Issue(link.Code)
+	clickID := uuid.New().String()
+	return h.renderIntermediateWithClickID(c, link, clickID)
+}
+
+func (h *RedirectHandler) renderIntermediateWithClickID(c *fiber.Ctx, link *model.Link, clickID string) error {
+	token, err := h.tokens.IssueWithClickID(link.Code, clickID)
 	if err != nil {
 		h.logger.Error("failed to issue redirect token", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -164,6 +183,7 @@ func (h *RedirectHandler) renderIntermediate(c *fiber.Ctx, link *model.Link) err
 		Mode:         link.Mode,
 		TimerSeconds: link.TimerSeconds,
 		Token:        token,
+		ClickID:      clickID,
 	})
 	if err != nil {
 		h.logger.Error("failed to render redirect page", zap.Error(err))
@@ -214,8 +234,8 @@ func (h *RedirectHandler) loadLink(ctx context.Context, code string) (*model.Lin
 	return link, nil
 }
 
-func (h *RedirectHandler) publishClickEvent(code string, c *fiber.Ctx) {
-	if err := h.clickPublisher.Publish(code, c.IP(), c.Get("User-Agent")); err != nil {
+func (h *RedirectHandler) publishClickEvent(code string, c *fiber.Ctx, status, clickID string) {
+	if err := h.clickPublisher.Publish(code, c.IP(), c.Get("User-Agent"), status, clickID); err != nil {
 		h.logger.Error("failed to publish click event", zap.Error(err), zap.String("code", code))
 	}
 }
