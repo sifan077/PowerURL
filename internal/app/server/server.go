@@ -36,7 +36,13 @@ type Server struct {
 
 // New creates a new HTTP server instance with default routes.
 func New(deps Dependencies) *Server {
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		BodyLimit:       4 * 1024 * 1024, // 4MB
+		ReadTimeout:     10 * time.Second,
+		WriteTimeout:    10 * time.Second,
+		IdleTimeout:     30 * time.Second,
+		DisableKeepalive: false,
+	})
 
 	s := &Server{
 		app:  app,
