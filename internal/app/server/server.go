@@ -45,6 +45,7 @@ func New(deps Dependencies) *Server {
 
 	s.registerMiddleware()
 	s.registerRoutes()
+	s.registerNotFoundHandler()
 	s.startBackgroundServices()
 	return s
 }
@@ -95,4 +96,12 @@ func (s *Server) registerRoutes() {
 		ClickPublisher: clickPublisher,
 	})
 	redirectHandler.Register(s.app)
+}
+
+func (s *Server) registerNotFoundHandler() {
+	s.app.Use(func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "route not found",
+		})
+	})
 }
