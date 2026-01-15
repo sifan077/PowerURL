@@ -93,7 +93,9 @@ func (h *RedirectHandler) Resolve(c *fiber.Ctx) error {
 	case "", "direct":
 		// Publish click event for direct mode with success status
 		if h.clickPublisher != nil {
-			go h.publishClickEvent(code, c, model.ClickStatusSuccess, "")
+			ip := c.IP()
+			userAgent := c.Get("User-Agent")
+			go h.publishClickEvent(code, ip, userAgent, model.ClickStatusSuccess, "")
 		}
 		h.logger.Debug("redirecting short link", zap.String("code", code), zap.String("target", link.URL))
 		return c.Redirect(link.URL, fiber.StatusFound)
@@ -101,7 +103,9 @@ func (h *RedirectHandler) Resolve(c *fiber.Ctx) error {
 		// Publish click event for intermediate modes with pending status
 		clickID := uuid.New().String()
 		if h.clickPublisher != nil {
-			go h.publishClickEvent(code, c, model.ClickStatusPending, clickID)
+			ip := c.IP()
+			userAgent := c.Get("User-Agent")
+			go h.publishClickEvent(code, ip, userAgent, model.ClickStatusPending, clickID)
 		}
 		return h.renderIntermediateWithClickID(c, link, clickID)
 	default:
@@ -234,8 +238,8 @@ func (h *RedirectHandler) loadLink(ctx context.Context, code string) (*model.Lin
 	return link, nil
 }
 
-func (h *RedirectHandler) publishClickEvent(code string, c *fiber.Ctx, status, clickID string) {
-	if err := h.clickPublisher.Publish(code, c.IP(), c.Get("User-Agent"), status, clickID); err != nil {
+func (h *RedirectHandler) publishClickEvent(code, ip, userAgent, status, clickID string) {
+	if err := h.clickPublisher.Publish(code, ip, userAgent, status, clickID); err != nil {
 		h.logger.Error("failed to publish click event", zap.Error(err), zap.String("code", code))
 	}
 }
