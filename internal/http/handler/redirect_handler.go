@@ -20,11 +20,11 @@ const tokenTTL = 60 * time.Second
 
 // RedirectDeps groups dependencies required by redirect handlers.
 type RedirectDeps struct {
-	Logger               *zap.Logger
-	Links                repository.LinkRepository
-	ClickEvents          repository.ClickEventRepository
-	Secret               []byte
-	ClickPublisher       *service.ClickPublisher
+	Logger         *zap.Logger
+	Links          repository.LinkRepository
+	ClickEvents    repository.ClickEventRepository
+	Secret         []byte
+	ClickPublisher *service.ClickPublisher
 }
 
 // RedirectHandler implements the redirect + intermediate flows.
@@ -164,11 +164,6 @@ func (h *RedirectHandler) Go(c *fiber.Ctx) error {
 	return c.Redirect(link.URL, fiber.StatusFound)
 }
 
-func (h *RedirectHandler) renderIntermediate(c *fiber.Ctx, link *model.Link) error {
-	clickID := uuid.New().String()
-	return h.renderIntermediateWithClickID(c, link, clickID)
-}
-
 func (h *RedirectHandler) renderIntermediateWithClickID(c *fiber.Ctx, link *model.Link, clickID string) error {
 	token, err := h.tokens.IssueWithClickID(link.Code, clickID)
 	if err != nil {
@@ -239,7 +234,33 @@ func (h *RedirectHandler) loadLink(ctx context.Context, code string) (*model.Lin
 }
 
 func (h *RedirectHandler) publishClickEvent(code, ip, userAgent, status, clickID string) {
-	if err := h.clickPublisher.Publish(code, ip, userAgent, status, clickID); err != nil {
-		h.logger.Error("failed to publish click event", zap.Error(err), zap.String("code", code))
+	h.publishClickEventWithRetry(code, ip, userAgent, status, clickID)
+}
+
+func (h *RedirectHandler) publishClickEventWithRetry(code, ip, userAgent, status, clickID string) {
+	const maxRetries = 3
+	const retryDelay = 100 * time.Millisecond
+
+	for i := 0; i < maxRetries; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := h.clickPublisher.PublishWithContext(ctx, code, ip, userAgent, status, clickID)
+		cancel()
+
+		if err == nil {
+			return
+		}
+
+		if i < maxRetries-1 {
+			h.logger.Warn("failed to publish click event, retrying",
+				zap.Error(err),
+				zap.String("code", code),
+				zap.Int("attempt", i+1),
+				zap.Int("max_retries", maxRetries))
+			time.Sleep(retryDelay)
+		}
 	}
+
+	h.logger.Error("failed to publish click event after all retries",
+		zap.String("code", code),
+		zap.String("status", status))
 }

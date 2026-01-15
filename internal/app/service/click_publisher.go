@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
@@ -21,6 +22,11 @@ func NewClickPublisher(js nats.JetStreamContext) *ClickPublisher {
 
 // Publish publishes a click event to the stream
 func (p *ClickPublisher) Publish(linkCode, ip, userAgent, status, clickID string) error {
+	return p.PublishWithContext(context.Background(), linkCode, ip, userAgent, status, clickID)
+}
+
+// PublishWithContext publishes a click event to the stream with context timeout
+func (p *ClickPublisher) PublishWithContext(ctx context.Context, linkCode, ip, userAgent, status, clickID string) error {
 	eventID := clickID
 	if eventID == "" {
 		eventID = uuid.New().String()
@@ -39,6 +45,17 @@ func (p *ClickPublisher) Publish(linkCode, ip, userAgent, status, clickID string
 		return err
 	}
 
-	_, err = p.js.Publish(model.ClickStreamSubject, data)
-	return err
+	// Use sync publish to wait for ACK
+	ack, err := p.js.Publish(model.ClickStreamSubject, data)
+	if err != nil {
+		return err
+	}
+
+	// Wait for ACK with context timeout
+	select {
+	case <-ack.Ok():
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
