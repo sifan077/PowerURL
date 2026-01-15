@@ -30,12 +30,17 @@ type Config struct {
 }
 
 type PostgresConfig struct {
-	Host     string `mapstructure:"host"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	Database string `mapstructure:"database"`
-	Port     int    `mapstructure:"port"`
-	SSLMode  string `mapstructure:"sslmode"`
+	Host                string `mapstructure:"host"`
+	User                string `mapstructure:"user"`
+	Password            string `mapstructure:"password"`
+	Database            string `mapstructure:"database"`
+	Port                int    `mapstructure:"port"`
+	SSLMode             string `mapstructure:"sslmode"`
+	MaxConns            int32  `mapstructure:"max_conns"`
+	MinConns            int32  `mapstructure:"min_conns"`
+	MaxConnLifetime     string `mapstructure:"max_conn_lifetime"`
+	MaxConnIdleTime     string `mapstructure:"max_conn_idle_time"`
+	HealthCheckPeriod   string `mapstructure:"health_check_period"`
 }
 
 type RedisConfig struct {

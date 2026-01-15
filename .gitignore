@@ -24,6 +24,7 @@ testdata/
 .env.local
 .env.*
 !.env
+!.env.example
 
 # OS junk
 Thumbs.db

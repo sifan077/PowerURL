@@ -21,6 +21,29 @@ func NewPool(ctx context.Context, cfg config.PostgresConfig) (*pgxpool.Pool, err
 		return nil, fmt.Errorf("postgres: parse config: %w", err)
 	}
 
+	// Apply connection pool configuration
+	if cfg.MaxConns > 0 {
+		poolCfg.MaxConns = cfg.MaxConns
+	}
+	if cfg.MinConns > 0 {
+		poolCfg.MinConns = cfg.MinConns
+	}
+	if cfg.MaxConnLifetime != "" {
+		if duration, err := time.ParseDuration(cfg.MaxConnLifetime); err == nil {
+			poolCfg.MaxConnLifetime = duration
+		}
+	}
+	if cfg.MaxConnIdleTime != "" {
+		if duration, err := time.ParseDuration(cfg.MaxConnIdleTime); err == nil {
+			poolCfg.MaxConnIdleTime = duration
+		}
+	}
+	if cfg.HealthCheckPeriod != "" {
+		if duration, err := time.ParseDuration(cfg.HealthCheckPeriod); err == nil {
+			poolCfg.HealthCheckPeriod = duration
+		}
+	}
+
 	dialCtx, cancel := context.WithTimeout(ctx, defaultDialTimeout)
 	defer cancel()
 
