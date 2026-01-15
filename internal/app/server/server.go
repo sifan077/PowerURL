@@ -16,13 +16,14 @@ import (
 
 // Dependencies bundles infrastructure dependencies required by the HTTP server.
 type Dependencies struct {
-	Logger    *zap.Logger
-	Postgres  *pgxpool.Pool
-	Redis     *redis.Client
-	NATS      *nats.Conn
-	JetStream nats.JetStreamContext
-	Links     repository.LinkRepository
-	Secret    []byte
+	Logger     *zap.Logger
+	Postgres   *pgxpool.Pool
+	Redis      *redis.Client
+	NATS       *nats.Conn
+	JetStream  nats.JetStreamContext
+	Links      repository.LinkRepository
+	ClickEvents repository.ClickEventRepository
+	Secret     []byte
 }
 
 // Server wraps the Fiber application and its dependencies.
@@ -67,7 +68,7 @@ func (s *Server) registerMiddleware() {
 
 func (s *Server) registerRoutes() {
 	clickPublisher := service.NewClickPublisher(s.deps.JetStream)
-	clickConsumer := service.NewClickConsumer(s.deps.JetStream, s.deps.Logger)
+	clickConsumer := service.NewClickConsumer(s.deps.JetStream, s.deps.Logger, s.deps.ClickEvents)
 
 	// Start click event consumer
 	if err := clickConsumer.Start(); err != nil {

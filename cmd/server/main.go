@@ -60,7 +60,7 @@ func main() {
 	}
 	defer sqlDB.Close()
 
-	if err := infraPostgres.AutoMigrate(ctx, gormDB, &appmodel.Link{}); err != nil {
+	if err := infraPostgres.AutoMigrate(ctx, gormDB, &appmodel.Link{}, &appmodel.ClickEvent{}); err != nil {
 		log.Fatal("Failed to run database migrations", zap.Error(err))
 	}
 
@@ -105,15 +105,17 @@ func main() {
 	}
 
 	linkRepo := apprepository.NewLinkRepository(gormDB, redisClient)
+	clickEventRepo := apprepository.NewClickEventRepository(gormDB)
 
 	server := appserver.New(appserver.Dependencies{
-		Logger:    log,
-		Postgres:  pool,
-		Redis:     redisClient,
-		NATS:      natsConn,
-		JetStream: js,
-		Links:     linkRepo,
-		Secret:    []byte(cfg.Security.RedirectSecret),
+		Logger:     log,
+		Postgres:   pool,
+		Redis:      redisClient,
+		NATS:       natsConn,
+		JetStream:  js,
+		Links:      linkRepo,
+		ClickEvents: clickEventRepo,
+		Secret:     []byte(cfg.Security.RedirectSecret),
 	})
 
 	if err := server.Listen(":8080"); err != nil {

@@ -1,24 +1,27 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/sifan077/PowerURL/internal/app/model"
+	apprepository "github.com/sifan077/PowerURL/internal/app/repository"
 	"go.uber.org/zap"
 )
 
 // ClickConsumer consumes click events from NATS JetStream
 type ClickConsumer struct {
-	js     nats.JetStreamContext
-	logger *zap.Logger
+	js       nats.JetStreamContext
+	logger   *zap.Logger
+	repo     apprepository.ClickEventRepository
 }
 
 // NewClickConsumer creates a new click event consumer
-func NewClickConsumer(js nats.JetStreamContext, logger *zap.Logger) *ClickConsumer {
-	return &ClickConsumer{js: js, logger: logger}
+func NewClickConsumer(js nats.JetStreamContext, logger *zap.Logger, repo apprepository.ClickEventRepository) *ClickConsumer {
+	return &ClickConsumer{js: js, logger: logger, repo: repo}
 }
 
 // Start begins consuming click events
@@ -59,6 +62,7 @@ func (c *ClickConsumer) Start() error {
 }
 
 func (c *ClickConsumer) consume(sub *nats.Subscription) {
+	ctx := context.Background()
 	for {
 		msgs, err := sub.Fetch(10, nats.MaxWait(5*time.Second))
 		if err != nil && err != nats.ErrTimeout {
@@ -74,12 +78,20 @@ func (c *ClickConsumer) consume(sub *nats.Subscription) {
 				continue
 			}
 
-			// Log the click event (instead of storing for now)
-			c.logger.Info("click event",
+			// Store the click event to database
+			if err := c.repo.Create(ctx, &event); err != nil {
+				c.logger.Error("failed to store click event",
+					zap.String("id", event.ID),
+					zap.String("link_code", event.LinkCode),
+					zap.Error(err))
+				msg.Nak()
+				continue
+			}
+
+			c.logger.Debug("click event stored",
 				zap.String("id", event.ID),
 				zap.String("link_code", event.LinkCode),
 				zap.String("ip", event.IP),
-				zap.String("user_agent", event.UserAgent),
 				zap.Time("timestamp", event.Timestamp),
 			)
 
