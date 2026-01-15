@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/sifan077/PowerURL/internal/app/model"
 	"github.com/sifan077/PowerURL/internal/app/repository"
+	"github.com/sifan077/PowerURL/internal/app/service"
 	httpUtil "github.com/sifan077/PowerURL/internal/http/util"
 	"github.com/sifan077/PowerURL/internal/http/view"
 	"go.uber.org/zap"
@@ -18,16 +19,18 @@ const tokenTTL = 60 * time.Second
 
 // RedirectDeps groups dependencies required by redirect handlers.
 type RedirectDeps struct {
-	Logger *zap.Logger
-	Links  repository.LinkRepository
-	Secret []byte
+	Logger         *zap.Logger
+	Links          repository.LinkRepository
+	Secret         []byte
+	ClickPublisher *service.ClickPublisher
 }
 
 // RedirectHandler implements the redirect + intermediate flows.
 type RedirectHandler struct {
-	logger *zap.Logger
-	links  repository.LinkRepository
-	tokens *httpUtil.TokenSigner
+	logger         *zap.Logger
+	links          repository.LinkRepository
+	tokens         *httpUtil.TokenSigner
+	clickPublisher *service.ClickPublisher
 }
 
 // NewRedirectHandler creates a redirect handler with the provided dependencies.
@@ -37,9 +40,10 @@ func NewRedirectHandler(deps RedirectDeps) *RedirectHandler {
 		logger = zap.NewNop()
 	}
 	return &RedirectHandler{
-		logger: logger,
-		links:  deps.Links,
-		tokens: httpUtil.NewTokenSigner(deps.Secret, tokenTTL),
+		logger:         logger,
+		links:          deps.Links,
+		tokens:         httpUtil.NewTokenSigner(deps.Secret, tokenTTL),
+		clickPublisher: deps.ClickPublisher,
 	}
 }
 
@@ -83,6 +87,10 @@ func (h *RedirectHandler) Resolve(c *fiber.Ctx) error {
 
 	switch link.Mode {
 	case "", "direct":
+		// Publish click event for direct mode
+		if h.clickPublisher != nil {
+			go h.publishClickEvent(code, c)
+		}
 		h.logger.Debug("redirecting short link", zap.String("code", code), zap.String("target", link.URL))
 		return c.Redirect(link.URL, fiber.StatusFound)
 	case "click", "timer":
@@ -127,6 +135,11 @@ func (h *RedirectHandler) Go(c *fiber.Ctx) error {
 		return c.Status(loadErr.StatusCode).JSON(fiber.Map{
 			"error": loadErr.Message,
 		})
+	}
+
+	// Publish click event asynchronously
+	if h.clickPublisher != nil {
+		go h.publishClickEvent(code, c)
 	}
 
 	h.logger.Debug("final redirect", zap.String("code", code), zap.String("target", link.URL))
@@ -199,4 +212,10 @@ func (h *RedirectHandler) loadLink(ctx context.Context, code string) (*model.Lin
 	}
 
 	return link, nil
+}
+
+func (h *RedirectHandler) publishClickEvent(code string, c *fiber.Ctx) {
+	if err := h.clickPublisher.Publish(code, c.IP(), c.Get("User-Agent")); err != nil {
+		h.logger.Error("failed to publish click event", zap.Error(err), zap.String("code", code))
+	}
 }

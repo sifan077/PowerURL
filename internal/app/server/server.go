@@ -8,6 +8,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 	"github.com/sifan077/PowerURL/internal/app/repository"
+	"github.com/sifan077/PowerURL/internal/app/service"
 	inthttp "github.com/sifan077/PowerURL/internal/http/handler"
 	"github.com/sifan077/PowerURL/internal/http/middleware"
 	"go.uber.org/zap"
@@ -65,10 +66,19 @@ func (s *Server) registerMiddleware() {
 }
 
 func (s *Server) registerRoutes() {
+	clickPublisher := service.NewClickPublisher(s.deps.JetStream)
+	clickConsumer := service.NewClickConsumer(s.deps.JetStream, s.deps.Logger)
+
+	// Start click event consumer
+	if err := clickConsumer.Start(); err != nil {
+		s.deps.Logger.Error("failed to start click consumer", zap.Error(err))
+	}
+
 	redirectHandler := inthttp.NewRedirectHandler(inthttp.RedirectDeps{
-		Logger: s.deps.Logger,
-		Links:  s.deps.Links,
-		Secret: s.deps.Secret,
+		Logger:         s.deps.Logger,
+		Links:          s.deps.Links,
+		Secret:         s.deps.Secret,
+		ClickPublisher: clickPublisher,
 	})
 	redirectHandler.Register(s.app)
 }
