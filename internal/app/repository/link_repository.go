@@ -20,9 +20,7 @@ const (
 	cacheKeyPrefix   = "link:"
 	cacheTTL         = 1 * time.Hour
 	cacheNullTTL     = 5 * time.Minute
-	bloomKey         = "bloom:links"
-	bloomSize        = 1000000
-	bloomHashes      = 7
+	linkSetKey       = "links:exists"
 	cacheNullValue   = "NULL"
 )
 
@@ -35,51 +33,34 @@ type LinkRepository interface {
 }
 
 type linkRepository struct {
-	db              *gorm.DB
-	redis           *redis.Client
-	bloomSupported  bool
+	db    *gorm.DB
+	redis *redis.Client
 }
 
-// NewLinkRepository returns a GORM-backed LinkRepository with Redis caching and bloom filter.
+// NewLinkRepository returns a GORM-backed LinkRepository with Redis caching.
 func NewLinkRepository(db *gorm.DB, redis *redis.Client) LinkRepository {
-	repo := &linkRepository{
+	return &linkRepository{
 		db:    db,
 		redis: redis,
-	}
-	repo.initBloomFilter(context.Background())
-	return repo
-}
-
-func (r *linkRepository) initBloomFilter(ctx context.Context) {
-	if r.redis == nil {
-		r.bloomSupported = false
-		return
-	}
-	exists, _ := r.redis.Exists(ctx, bloomKey).Result()
-	if exists == 0 {
-		err := r.redis.Do(ctx, "BF.RESERVE", bloomKey, bloomSize, bloomHashes).Err()
-		r.bloomSupported = err == nil
-	} else {
-		r.bloomSupported = true
 	}
 }
 
 func (r *linkRepository) bloomAdd(ctx context.Context, code string) {
-	if !r.bloomSupported || r.redis == nil {
+	if r.redis == nil {
 		return
 	}
-	r.redis.Do(ctx, "BF.ADD", bloomKey, code)
+	r.redis.SAdd(ctx, linkSetKey, code)
 }
 
 func (r *linkRepository) bloomExists(ctx context.Context, code string) bool {
-	if !r.bloomSupported || r.redis == nil {
+	if r.redis == nil {
 		return true
 	}
-	result, err := r.redis.Do(ctx, "BF.EXISTS", bloomKey, code).Int()
+	result, err := r.redis.SIsMember(ctx, linkSetKey, code).Result()
 	if err != nil {
 		return true
 	}
-	return result == 1
+	return result
 }
 
 func (r *linkRepository) Create(ctx context.Context, link *model.Link) error {
