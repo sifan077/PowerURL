@@ -45,17 +45,11 @@ func (p *ClickPublisher) PublishWithContext(ctx context.Context, linkCode, ip, u
 		return err
 	}
 
-	// Use sync publish to wait for ACK
-	ack, err := p.js.Publish(model.ClickStreamSubject, data)
+	// Publish is synchronous and waits for ACK
+	_, err = p.js.Publish(model.ClickStreamSubject, data)
 	if err != nil {
 		return err
 	}
 
-	// Wait for ACK with context timeout
-	select {
-	case <-ack.Ok():
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return nil
 }
