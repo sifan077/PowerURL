@@ -17,11 +17,10 @@ var (
 )
 
 const (
-	cacheKeyPrefix   = "link:"
-	cacheTTL         = 1 * time.Hour
-	cacheNullTTL     = 5 * time.Minute
-	linkSetKey       = "links:exists"
-	cacheNullValue   = "NULL"
+	cacheKeyPrefix = "link:"
+	cacheTTL       = 1 * time.Hour
+	cacheNullTTL   = 5 * time.Minute
+	cacheNullValue = "NULL"
 )
 
 // LinkRepository defines the data access contract for short links.
@@ -45,37 +44,14 @@ func NewLinkRepository(db *gorm.DB, redis *redis.Client) LinkRepository {
 	}
 }
 
-func (r *linkRepository) bloomAdd(ctx context.Context, code string) {
-	if r.redis == nil {
-		return
-	}
-	r.redis.SAdd(ctx, linkSetKey, code)
-}
-
-func (r *linkRepository) bloomExists(ctx context.Context, code string) bool {
-	if r.redis == nil {
-		return true
-	}
-	result, err := r.redis.SIsMember(ctx, linkSetKey, code).Result()
-	if err != nil {
-		return true
-	}
-	return result
-}
-
 func (r *linkRepository) Create(ctx context.Context, link *model.Link) error {
 	if err := r.db.WithContext(ctx).Create(link).Error; err != nil {
 		return err
 	}
-	r.bloomAdd(ctx, link.Code)
 	return nil
 }
 
 func (r *linkRepository) GetByCode(ctx context.Context, code string) (*model.Link, error) {
-	if !r.bloomExists(ctx, code) {
-		return nil, ErrLinkNotFound
-	}
-
 	cacheKey := cacheKeyPrefix + code
 
 	if r.redis != nil {

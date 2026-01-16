@@ -102,6 +102,14 @@ func (s *Server) registerRoutes() {
 		ClickPublisher: clickPublisher,
 	})
 	redirectHandler.Register(s.app)
+
+	// Register API handler
+	linkService := service.NewLinkService(s.deps.Links)
+	apiHandler := inthttp.NewAPIHandler(inthttp.APIDeps{
+		Logger:      s.deps.Logger,
+		LinkService: linkService,
+	})
+	apiHandler.Register(s.app)
 }
 
 func (s *Server) registerNotFoundHandler() {
